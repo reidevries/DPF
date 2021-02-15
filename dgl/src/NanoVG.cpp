@@ -963,8 +963,8 @@ NanoWidget::NanoWidget(NanoWidget* groupWidget)
       NanoVG(groupWidget),
       nData(new PrivateData(this))
 {
+	//pData->skipDisplay = true;
     pData->needsScaling = true;
-    pData->skipDisplay = true;
     groupWidget->nData->subWidgets.push_back(this);
 }
 
