@@ -51,6 +51,7 @@
 #else
 # include <sys/types.h>
 # include <unistd.h>
+# include <X11/cursorfont.h> //required for pdesaulnier fork
 extern "C" {
 # include "pugl/pugl_x11.c"
 }
@@ -304,6 +305,23 @@ struct Window::PrivateData {
             XChangeProperty(xDisplay, xWindow, _wt, XA_ATOM, 32, PropModeReplace, (const uchar*)&_wts, 2);
         }
 #endif
+		//even more stuff taken from pdesaulnier fork
+		//init invisible cursor, should probably be done elsewhere
+		XColor black;
+		black.red = black.green = black.blue = 0;
+
+		const char noData[] = {0, 0, 0, 0, 0, 0, 0, 0};
+
+		Pixmap bitmapNoData = XCreateBitmapFromData(xDisplay, xWindow, noData, 8, 8);
+		invisibleCursor = XCreatePixmapCursor(xDisplay, bitmapNoData, bitmapNoData, &black, &black, 0, 0);
+
+		XFreePixmap(xDisplay, bitmapNoData);
+
+		xClipCursorWindow = XCreateWindow(xDisplay, xWindow, 0, 0, fWidth, fHeight, 0, 0, InputOnly, NULL, 0, NULL);
+
+		XMapWindow(xDisplay, xClipCursorWindow);
+		//end even more stuff taken from pdesaulnier fork
+
         puglEnterContext(fView);
 
         fApp.pData->windows.push_back(fSelf);
@@ -1237,6 +1255,14 @@ struct Window::PrivateData {
     char* fTitle;
     std::list<Widget*> fWidgets;
 
+	//more stuff from pdesaulnier fork
+	bool fCursorIsClipped;
+	bool fMustSaveSize;
+	bool fIsFullscreen;
+	Size<uint> fPreFullscreenSize;
+	bool fIsContextMenu;
+	//end more stuff from pdesaulnier fork
+
     struct Modal {
         bool enabled;
         PrivateData* parent;
@@ -1283,6 +1309,9 @@ struct Window::PrivateData {
 #else
     Display* xDisplay;
     ::Window xWindow;
+
+	::Window xClipCursorWindow; //pdesaulnier fork
+	Cursor invisibleCursor; //pdesaulnier fork
 #endif
 
     // -------------------------------------------------------------------
@@ -1761,6 +1790,435 @@ void Window::onReshape(uint width, uint height)
 void Window::onClose()
 {
 }
+
+//stuff taken from pdesaulnier fork
+void Window::setMinSize(uint width, uint height)
+{
+#if defined(DISTRHO_OS_MAC)
+	[pData->mWindow setContentMinSize:NSMakeSize(width, height)];
+#elif !defined(DISTRHO_OS_WINDOWS) //Linux
+	XSizeHints sizeHints;
+	memset(&sizeHints, 0, sizeof(sizeHints));
+
+	sizeHints.flags = PMinSize;
+	sizeHints.min_width = static_cast<int>(width);
+	sizeHints.min_height = static_cast<int>(height);
+
+	XSetNormalHints(pData->xDisplay, pData->xWindow, &sizeHints);
+#endif
+
+	//pugl takes care of it for windows
+	pData->fView->min_width = width;
+	pData->fView->min_height = height;
+}
+
+Point<int> Window::getAbsolutePos()
+{
+	int posX;
+	int posY;
+
+#if !defined(DISTRHO_OS_WINDOWS) && !defined(DISTRHO_OS_MAC)
+	::Window unused;
+
+	XTranslateCoordinates(pData->xDisplay,
+                      pData->xWindow,
+                      DefaultRootWindow(pData->xDisplay),
+                      0, 0,
+                      &posX,
+                      &posY,
+					  &unused);
+
+	return Point<int>(posX, posY);
+#elif defined(DISTRHO_OS_WINDOWS)
+	RECT windowRect;
+    GetWindowRect(pData->hwnd, &windowRect);
+
+	return Point<int>(windowRect.left, windowRect.top);
+#endif
+}
+
+void Window::setAbsolutePos(const uint x, const uint y)
+{
+#if !defined(DISTRHO_OS_WINDOWS) && !defined(DISTRHO_OS_MAC)
+	XMoveWindow(pData->xDisplay, pData->xWindow, x, y);
+
+#elif defined(DISTRHO_OS_WINDOWS)
+	SetWindowPos(pData->hwnd, HWND_TOP, x, y, getWidth(), getHeight(), isVisible() ? SWP_SHOWWINDOW : SWP_HIDEWINDOW);
+
+#endif
+}
+
+//TODO: proper "ContextWindow" class, or similar
+void Window::hideFromTaskbar()
+{
+#if !defined(DISTRHO_OS_WINDOWS) && !defined(DISTRHO_OS_MAC)
+	Atom wmState = XInternAtom(pData->xDisplay,  "_NET_WM_STATE", False);
+	Atom atom = XInternAtom(pData->xDisplay, "_NET_WM_STATE_SKIP_TASKBAR", False);
+
+	XChangeProperty(pData->xDisplay, pData->xWindow, wmState, XA_ATOM, 32, PropModeReplace, (unsigned char *)&atom, 1);
+
+	XSetWindowAttributes attributes;
+	attributes.override_redirect = true;
+	XChangeWindowAttributes(pData->xDisplay, pData->xWindow, CWOverrideRedirect, &attributes);
+	XGrabPointer(pData->xDisplay, pData->xWindow, True, ButtonPressMask, GrabModeAsync, GrabModeAsync, None, None, CurrentTime);
+
+#elif defined(DISTRHO_OS_WINDOWS)
+	SetWindowLong(pData->hwnd, GWL_EXSTYLE, WS_EX_TOOLWINDOW | WS_EX_APPWINDOW);
+#endif
+
+	pData->fIsContextMenu = true;
+}
+
+void Window::setBorderless(bool borderless)
+{
+#if !defined(DISTRHO_OS_WINDOWS) && !defined(DISTRHO_OS_MAC)
+	struct MwmHints {
+    	unsigned long flags;
+    	unsigned long functions;
+    	unsigned long decorations;
+    	long input_mode;
+    	unsigned long status;
+	};
+	enum {
+    	MWM_HINTS_FUNCTIONS = (1L << 0),
+    	MWM_HINTS_DECORATIONS =  (1L << 1),
+
+		MWM_FUNC_ALL = (1L << 0),
+		MWM_FUNC_RESIZE = (1L << 1),
+		MWM_FUNC_MOVE = (1L << 2),
+		MWM_FUNC_MINIMIZE = (1L << 3),
+		MWM_FUNC_MAXIMIZE = (1L << 4),
+		MWM_FUNC_CLOSE = (1L << 5)
+	};
+
+	Atom mwmHintsProperty = XInternAtom(pData->xDisplay, "_MOTIF_WM_HINTS", 0);
+	struct MwmHints hints;
+	hints.flags = MWM_HINTS_DECORATIONS;
+	hints.decorations = borderless ? 0 : 1;
+
+	XChangeProperty(pData->xDisplay, pData->xWindow, mwmHintsProperty, mwmHintsProperty, 32, PropModeReplace, (unsigned char *)&hints, 5);
+
+#elif defined(DISTRHO_OS_WINDOWS)
+	LONG lStyle = GetWindowLong(pData->hwnd, GWL_STYLE);
+	lStyle &= ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU);
+	SetWindowLong(pData->hwnd, GWL_STYLE, lStyle);
+#endif
+}
+
+void Window::toggleFullscreen()
+{
+#if !defined(DISTRHO_OS_WINDOWS) && !defined(DISTRHO_OS_MAC)
+	XUnmapWindow(pData->xDisplay, pData->xWindow);
+	XSync(pData->xDisplay, False);
+
+	Atom atoms[2] = { XInternAtom(pData->xDisplay, "_NET_WM_STATE_FULLSCREEN", False), None };
+	XChangeProperty(pData->xDisplay, pData->xWindow, XInternAtom(pData->xDisplay, "_NET_WM_STATE", False), XA_ATOM, 32, PropModeReplace, (unsigned char *)atoms, 1);
+	XSync(pData->xDisplay, False);
+
+	XMapWindow(pData->xDisplay, pData->xWindow);
+	XSync(pData->xDisplay, False);
+
+	int screen = 0;
+
+	if(!pData->fIsFullscreen)
+	{
+		pData->fPreFullscreenSize = getSize();
+		setSize(XWidthOfScreen(XScreenOfDisplay(pData->xDisplay, screen)), XHeightOfScreen(XScreenOfDisplay(pData->xDisplay, screen)));
+	}
+	else
+	{
+		setSize(pData->fPreFullscreenSize);
+	}
+
+#endif
+
+	saveSizeAtExit(false); //to make sure the default window size won't be as big as the monitor
+	pData->fIsFullscreen = !pData->fIsFullscreen;
+}
+
+void Window::saveSizeAtExit(bool yesno)
+{
+	pData->fMustSaveSize = yesno;
+}
+
+bool Window::mustSaveSize()
+{
+	return pData->fMustSaveSize;
+}
+
+void Window::setCursorStyle(CursorStyle style) noexcept
+{
+#if defined(DISTRHO_OS_WINDOWS)
+	LPCSTR cursorName;
+
+	switch (style)
+	{
+	case CursorStyle::Default:
+		cursorName = IDC_ARROW;
+		break;
+	case CursorStyle::Grab:
+		cursorName = IDC_HAND;
+		break;
+	case CursorStyle::Pointer:
+		cursorName = IDC_HAND;
+		break;
+	case CursorStyle::SouthEastResize:
+		cursorName = IDC_SIZENWSE;
+		break;
+	case CursorStyle::UpDown:
+		cursorName = IDC_SIZENS;
+		break;
+	default:
+		cursorName = IDC_ARROW;
+		break;
+	}
+
+	HCURSOR cursor = LoadCursor(NULL, cursorName);
+	SetCursor(cursor);
+
+#elif defined(DISTRHO_OS_MAC)
+
+	switch (style)
+	{
+	case CursorStyle::Default:
+		[[NSCursor arrow] set];
+		break;
+	case CursorStyle::Grab:
+		[[NSCursor openHand] set];
+		break;
+	case CursorStyle::Pointer:
+		[[NSCursor pointingHand] set];
+		break;
+	case CursorStyle::SouthEastResize:
+		[[NSCursor _windowResizeNorthWestSouthEastCursor] set];
+		break;
+	case CursorStyle::UpDown:
+		[[NSCursor resizeUpDown] set];
+		break;
+	default:
+		[[NSCursor arrow] set];
+		break;
+	}
+
+#else
+	uint cursorId;
+
+	switch (style)
+	{
+	case CursorStyle::Default:
+		cursorId = XC_arrow;
+		break;
+	case CursorStyle::Grab:
+		cursorId = XC_hand2;
+		break;
+	case CursorStyle::Pointer:
+		cursorId = XC_hand2;
+		break;
+	case CursorStyle::SouthEastResize:
+		cursorId = XC_bottom_right_corner;
+		break;
+	case CursorStyle::UpDown:
+		cursorId = XC_sb_v_double_arrow;
+		break;
+	default:
+		cursorId = XC_arrow;
+		break;
+	}
+
+	Cursor cursor = XCreateFontCursor(pData->xDisplay, cursorId);
+	XDefineCursor(pData->xDisplay, pData->xWindow, cursor);
+
+	XSync(pData->xDisplay, False);
+#endif
+}
+
+void Window::showCursor() noexcept
+{
+#if defined(DISTRHO_OS_WINDOWS)
+	while (ShowCursor(true) < 0)
+		;
+
+#elif defined(DISTRHO_OS_MAC)
+	CGDisplayShowCursor(kCGNullDirectDisplay);
+
+#else
+	XUndefineCursor(pData->xDisplay, pData->xWindow);
+
+	XSync(pData->xDisplay, False);
+#endif
+}
+
+void Window::hideCursor() noexcept
+{
+#if defined(DISTRHO_OS_WINDOWS)
+	while (ShowCursor(false) >= 0)
+		;
+
+#elif defined(DISTRHO_OS_MAC)
+	CGDisplayHideCursor(kCGNullDirectDisplay);
+
+#else
+	XDefineCursor(pData->xDisplay, pData->xWindow, pData->invisibleCursor);
+
+	XSync(pData->xDisplay, False);
+#endif
+}
+
+const Point<int> Window::getCursorPos() const noexcept
+{
+#if defined(DISTRHO_OS_WINDOWS)
+	POINT pos;
+	GetCursorPos(&pos);
+
+	ScreenToClient(pData->hwnd, &pos);
+
+	return Point<int>(pos.x, pos.y);
+
+#elif defined(DISTRHO_OS_MAC)
+	NSPoint mouseLoc = [NSEvent mouseLocation];
+
+	const int x = static_cast<int>(mouseLoc.x);
+	const int y = static_cast<int>(pData->fHeight - mouseLoc.y); //flip y so that the origin is at the top left
+
+	fprintf(stderr, "%d %d\n", x, y);
+	return Point<int>(x, y);
+
+#else
+	int posX, posY;
+
+	//unused variables
+	int i;
+	uint u;
+	::Window w;
+
+	XQueryPointer(pData->xDisplay, pData->xWindow, &w, &w, &i, &i, &posX, &posY, &u);
+
+	return Point<int>(posX, posY);
+#endif
+}
+
+/**
+ * Set the cursor position relative to the window.
+ */
+void Window::setCursorPos(int x, int y) noexcept
+{
+#if defined(DISTRHO_OS_WINDOWS)
+	RECT winRect;
+	GetWindowRect(pData->hwnd, &winRect);
+
+	SetCursorPos(winRect.left + x, winRect.top + y);
+
+#elif defined(DISTRHO_OS_MAC)
+	CGWarpMouseCursorPosition(CGPointMake(x, y));
+
+#else
+	Display *xDisplay = pData->xDisplay;
+	XEvent xEvent;
+
+	XSynchronize(xDisplay, True);
+
+	XWarpPointer(xDisplay, None, pData->xWindow, 0, 0, 0, 0, x, y);
+
+	while (XPending(xDisplay) > 0)
+	{
+		XNextEvent(xDisplay, &xEvent);
+
+		if (xEvent.type == ButtonRelease)
+		{
+			//PuglEvent event = translateEvent(pData->fView, xEvent);
+			//pData->onMouseCallback(pData->fView,
+			//	event.button.button,
+			//	event.button.state,
+			//	event.button.x,
+			//	event.button.y);
+			//we don't have access to PuglEvent in this version of DPF so I have
+			//to reimplement this without it, but that's no biggie.
+			if (xEvent.xbutton.button >= 4 && xEvent.xbutton.button <= 7) {
+				unsigned button_state = 0;
+				const unsigned xstate = xEvent.xbutton.state;
+				button_state |= (xstate & ShiftMask)   ? PUGL_MOD_SHIFT : 0;
+				button_state |= (xstate & ControlMask) ? PUGL_MOD_CTRL  : 0;
+				button_state |= (xstate & Mod1Mask)    ? PUGL_MOD_ALT   : 0;
+				button_state |= (xstate & Mod4Mask)    ? PUGL_MOD_SUPER : 0;
+				pData->onMouseCallback(pData->fView,
+					xEvent.xbutton.button,
+					button_state,
+					xEvent.xbutton.x,
+					xEvent.xbutton.y);
+			} //in original code, if this if check fails, pData->onMouseCallback
+			  // will return early, so just do nothing.
+		}
+	}
+
+	XSynchronize(xDisplay, False);
+#endif
+}
+
+void Window::setCursorPos(const Point<int> &pos) noexcept
+{
+	setCursorPos(pos.getX(), pos.getY());
+}
+
+void Window::setCursorPos(Widget *const widget) noexcept
+{
+	setCursorPos(widget->getAbsoluteX() + widget->getWidth() / 2, widget->getAbsoluteY() + widget->getHeight() / 2);
+}
+
+void Window::clipCursor(Rectangle<int> rect) const noexcept
+{
+	pData->fCursorIsClipped = true;
+
+#if defined(DISTRHO_OS_WINDOWS)
+	RECT winRect, clipRect;
+	GetWindowRect(pData->hwnd, &winRect);
+
+	clipRect.left = rect.getX() + winRect.left;
+	clipRect.right = rect.getX() + rect.getWidth() + winRect.left + 1;
+	clipRect.top = rect.getY() + winRect.top;
+	clipRect.bottom = rect.getY() + rect.getHeight() + winRect.top + 1;
+
+	ClipCursor(&clipRect);
+
+#elif defined(DISTRHO_OS_MAC)
+	//CGAssociateMouseAndMouseCursorPosition(false);
+
+#else
+	XMoveResizeWindow(pData->xDisplay, pData->xClipCursorWindow, rect.getX(), rect.getY(), rect.getWidth() + 1, rect.getHeight() + 1);
+	XSync(pData->xDisplay, False);
+
+	XGrabPointer(pData->xDisplay, pData->xWindow, True, 0, GrabModeAsync, GrabModeAsync, pData->xClipCursorWindow, None, CurrentTime);
+	XSync(pData->xDisplay, False);
+#endif
+}
+
+void Window::clipCursor(Widget *const widget) const noexcept
+{
+	const Point<int> pos = widget->getAbsolutePos();
+	const uint width = widget->getWidth();
+	const uint height = widget->getHeight();
+
+	clipCursor(Rectangle<int>(pos, width, height));
+}
+
+void Window::unclipCursor() const noexcept
+{
+	pData->fCursorIsClipped = false;
+
+#if defined(DISTRHO_OS_WINDOWS)
+	ClipCursor(NULL);
+
+#elif defined(DISTRHO_OS_MAC)
+	CGAssociateMouseAndMouseCursorPosition(true);
+
+#else
+	XUngrabPointer(pData->xDisplay, CurrentTime);
+
+	XSync(pData->xDisplay, False);
+#endif
+}
+
+//end stuff taken from pdesaulnier fork
+
 
 #ifndef DGL_FILE_BROWSER_DISABLED
 void Window::fileBrowserSelected(const char*)

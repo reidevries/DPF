@@ -339,6 +339,11 @@ public:
     */
     void setId(uint id) noexcept;
 
+	//taken from pdesaulnier's fork
+	static const uint kNoWidgetFocusedId = 99999;
+	uint* getFocusedWidgetIdPtr() noexcept;
+	//end fork
+
 protected:
    /**
       A function called to draw the view contents with OpenGL.

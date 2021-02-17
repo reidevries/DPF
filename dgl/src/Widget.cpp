@@ -214,6 +214,11 @@ void Widget::setId(uint id) noexcept
     pData->id = id;
 }
 
+uint* Widget::getFocusedWidgetIdPtr() noexcept //pdesaulnier fork
+{
+	return &pData->focusedWidgetId;
+}
+
 bool Widget::onKeyboard(const KeyboardEvent&)
 {
     return false;
