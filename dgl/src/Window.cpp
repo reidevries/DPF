@@ -1120,6 +1120,23 @@ struct Window::PrivateData {
         close();
     }
 
+	// no longer exists. muahahah
+/*	void onPuglFocusOut()
+	{
+		DBG("PUGL: onFocusOut\n");
+
+		fSelf->onFocusOut();
+
+		FOR_EACH_WIDGET_INV(rit)
+		{
+			Widget *const widget(*rit);
+
+			widget->onFocusOut();
+		}
+
+		fSelf->unclipCursor();
+	}*/
+
     // -------------------------------------------------------------------
 
     bool handlePluginKeyboard(const bool press, const uint key)
@@ -1255,13 +1272,13 @@ struct Window::PrivateData {
     char* fTitle;
     std::list<Widget*> fWidgets;
 
-	//more stuff from pdesaulnier fork
+	//more stuff from pdesaulniers fork
 	bool fCursorIsClipped;
 	bool fMustSaveSize;
 	bool fIsFullscreen;
 	Size<uint> fPreFullscreenSize;
 	bool fIsContextMenu;
-	//end more stuff from pdesaulnier fork
+	//end more stuff from pdesaulniers fork
 
     struct Modal {
         bool enabled;
@@ -1310,8 +1327,8 @@ struct Window::PrivateData {
     Display* xDisplay;
     ::Window xWindow;
 
-	::Window xClipCursorWindow; //pdesaulnier fork
-	Cursor invisibleCursor; //pdesaulnier fork
+	::Window xClipCursorWindow; //pdesaulniers fork
+	Cursor invisibleCursor; //pdesaulniers fork
 #endif
 
     // -------------------------------------------------------------------
@@ -1791,7 +1808,7 @@ void Window::onClose()
 {
 }
 
-//stuff taken from pdesaulnier fork
+//stuff taken from pdesaulniers fork
 void Window::setMinSize(uint width, uint height)
 {
 #if defined(DISTRHO_OS_MAC)
@@ -2217,7 +2234,7 @@ void Window::unclipCursor() const noexcept
 #endif
 }
 
-//end stuff taken from pdesaulnier fork
+//end stuff taken from pdesaulniers fork
 
 
 #ifndef DGL_FILE_BROWSER_DISABLED

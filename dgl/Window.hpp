@@ -125,7 +125,7 @@ public:
     void addIdleCallback(IdleCallback* const callback);
     void removeIdleCallback(IdleCallback* const callback);
 
-	//taken from pdesaulnier fork
+	//taken from pdesaulniers fork
     void setMinSize(uint width, uint height);
 
     Point<int> getAbsolutePos();
@@ -184,13 +184,14 @@ public:
     void setCursorPos(Widget* const widget) noexcept;
 
     void setCursorStyle(CursorStyle style) noexcept;
-	//end stuff taken from pdesaulnier fork
+	//end stuff taken from pdesaulniers fork
 
 protected:
     virtual void onDisplayBefore();
     virtual void onDisplayAfter();
     virtual void onReshape(uint width, uint height);
-    virtual void onClose();
+	//virtual void onFocusOut();
+	virtual void onClose();
 
 #ifndef DGL_FILE_BROWSER_DISABLED
     virtual void fileBrowserSelected(const char* filename);
