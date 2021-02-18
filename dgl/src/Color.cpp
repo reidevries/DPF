@@ -192,12 +192,26 @@ void Color::interpolate(const Color& other, float u) noexcept
     fixBounds();
 }
 
-float Color::getValue()
+void Color::brighten(const float coefficient) noexcept
+{
+	red   = std::min(1.0f, red   *coefficient);
+	green = std::min(1.0f, green *coefficient);
+	blue  = std::min(1.0f, blue  *coefficient);
+}
+
+void Color::invert() noexcept
+{
+	red   = 1.0f-red;
+	green = 1.0f-green;
+	blue  = 1.0f-blue;
+}
+
+float Color::getValue() noexcept
 {
 	return std::max(red,std::max(green, blue));
 }
 
-float Color::getSaturation()
+float Color::getSaturation() noexcept
 {
 	const float max = std::max(red,std::max(green,blue));
 	const float min = std::min(red,std::min(green,blue));
@@ -209,7 +223,7 @@ float Color::getSaturation()
 	return (delta/max);
 }
 
-float Color::getHue()
+float Color::getHue() noexcept
 {
 	const float max = std::max(red,std::max(green,blue));
 	const float min = std::min(red,std::min(green,blue));

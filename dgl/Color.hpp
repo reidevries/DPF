@@ -82,19 +82,29 @@ struct Color {
     void interpolate(const Color& other, float u) noexcept;
 
 	/**
+	   Change the brightness of the color
+	 */
+	void brighten(float coefficient) noexcept;
+
+	/**
+	   Invert the color
+	 */
+	void invert() noexcept;
+
+	/**
 	   Get the value of the Color as float
 	 */
-	float getValue();
+	float getValue() noexcept;
 
 	/**
 	   Get the saturation of the Color as a float
 	 */
-	float getSaturation();
+	float getSaturation() noexcept;
 
 	/**
 	   Get the hue of the Color as a float
 	 */
-	float getHue();
+	float getHue() noexcept;
 
    /**
       Check if this color matches another.
