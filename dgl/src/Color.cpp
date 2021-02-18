@@ -192,18 +192,22 @@ void Color::interpolate(const Color& other, float u) noexcept
     fixBounds();
 }
 
-void Color::brighten(const float coefficient) noexcept
+Color Color::brighten(Color in, const float coefficient) noexcept
 {
-	red   = std::min(1.0f, red   *coefficient);
-	green = std::min(1.0f, green *coefficient);
-	blue  = std::min(1.0f, blue  *coefficient);
+	Color out;
+	out.red   = std::min(1.0f, in.red   *coefficient);
+	out.green = std::min(1.0f, in.green *coefficient);
+	out.blue  = std::min(1.0f, in.blue  *coefficient);
+	return out;
 }
 
-void Color::invert() noexcept
+Color Color::invert(Color in) noexcept
 {
-	red   = 1.0f-red;
-	green = 1.0f-green;
-	blue  = 1.0f-blue;
+	Color out;
+	out.red   = 1.0f-in.red;
+	out.green = 1.0f-in.green;
+	out.blue  = 1.0f-in.blue;
+	return out;
 }
 
 float Color::getValue() noexcept

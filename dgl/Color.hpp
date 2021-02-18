@@ -76,20 +76,20 @@ struct Color {
     */
     static Color fromHTML(const char* rgb, float alpha = 1.0f);
 
-   /**
-      Linearly interpolate this color against another.
-    */
-    void interpolate(const Color& other, float u) noexcept;
-
 	/**
-	   Change the brightness of the color
+	   Get an increased brightness version of the color
 	 */
-	void brighten(float coefficient) noexcept;
+	static Color brighten(Color in, float coefficient) noexcept;
 
 	/**
 	   Invert the color
 	 */
-	void invert() noexcept;
+	static Color invert(Color in) noexcept;
+
+   /**
+      Linearly interpolate this color against another.
+    */
+    void interpolate(const Color& other, float u) noexcept;
 
 	/**
 	   Get the value of the Color as float
