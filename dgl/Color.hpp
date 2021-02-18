@@ -81,6 +81,21 @@ struct Color {
     */
     void interpolate(const Color& other, float u) noexcept;
 
+	/**
+	   Get the value of the Color as float
+	 */
+	float getValue();
+
+	/**
+	   Get the saturation of the Color as a float
+	 */
+	float getSaturation();
+
+	/**
+	   Get the hue of the Color as a float
+	 */
+	float getHue();
+
    /**
       Check if this color matches another.
       @note Comparison is forced within 8-bit color values.

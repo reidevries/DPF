@@ -192,6 +192,51 @@ void Color::interpolate(const Color& other, float u) noexcept
     fixBounds();
 }
 
+float Color::getValue()
+{
+	return std::max(red,std::max(green, blue));
+}
+
+float Color::getSaturation()
+{
+	const float max = std::max(red,std::max(green,blue));
+	const float min = std::min(red,std::min(green,blue));
+	const float delta = max-min;
+	if (delta < 0.000001f || max < 0.000001f)
+	{
+		return 0.0f;
+	}
+	return (delta/max);
+}
+
+float Color::getHue()
+{
+	const float max = std::max(red,std::max(green,blue));
+	const float min = std::min(red,std::min(green,blue));
+	const float delta = max-min;
+	if (delta < 0.000001f || max < 0.000001f)
+	{
+		return 0.0f;
+	}
+
+	float hue;
+	if (red >= max)
+	{
+		hue = (red-green)/delta; // between yellow and magenta
+	}
+	else if (green >= max)
+	{
+		hue = 2.0f + (blue-red)/delta; // between cyan and yellow
+	}
+	else
+	{
+		hue = 4.0f + (red-green)/delta; // between magenta and cyan
+	}
+
+	if (hue < 0.0f) hue += 6.0f; // wrap negative values
+	return hue / 6.0f; // constrain to range 0.0f to 1.0f
+}
+
 // -----------------------------------------------------------------------
 
 bool Color::isEqual(const Color& color, bool withAlpha) noexcept
